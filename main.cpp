@@ -33,14 +33,12 @@
 *
 */
 
-
 #include <fstream>
 #include <iostream>
 #include <iomanip>
 #include <vector>
 #include <map>
 #include <string>
-#include <string_view>
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
@@ -49,70 +47,38 @@
 
 namespace Util
 {
-    struct KnownEscape
-    {
-        int chval;
-        const char* strval;
-    };
-
-    static const KnownEscape known_escapes[] =
-    {
-        {0, "\\0"},
-        {1, "\\1"},
-        {2, "\\2"},
-        {3, "\\3"},
-        {'\n', "\\n"},
-        {'\t', "\\t"},
-        {'\r', "\\r"},
-        {'\f', "\\f"},
-        {'\v', "\\v"},
-        #if !defined(_MSC_VER)
-        {'\e', "\\e"},
-        #endif
-        {0, NULL},
-    };
-
     template<typename CharT>
     void escapechar(std::basic_ostream<CharT>& out, int ch, bool wquotes=false)
     {
-        int i;
-        // hack to write to wchar_t streams
-        // despite the standard, this is actually completely legal.
-        auto put = [&](const char* str)
-        {
-            int k;
-            for(k=0; str[k]!=0; k++)
-            {
-                out.put(CharT(str[k]));
-            }
-        };
-        if((ch >= CharT('A')) && (ch <= CharT('z')))
+        //if(((ch >= ' ') && (ch <= '9')) || ((ch >= 'A') && (ch <= 'z')))
+        if((ch >= 32) && (ch <= 126))
         {
             if(ch == '\\')
             {
-                out.put(CharT('\\')).put(CharT('\\'));
+                out << CharT('\\') << CharT('\\');
             }
             else
             {
                 out << CharT(ch);
             }
+            return;
         }
         else
         {
-            for(i=0; known_escapes[i].strval != NULL; i++)
-            {
-                if(ch == known_escapes[i].chval)
-                {
-                    put(known_escapes[i].strval);
-                    return;
-                }
-            }
             if((ch == CharT('"')) && wquotes)
             {
-                put("\\\"");
+                out << CharT('\\') << CharT('"');
                 return;
             }
-            // still here? then it wasn't in known_escapes.
+            switch(ch)
+            {
+                case 0:    out << CharT('\\') << CharT('0'); return;
+                case 1:    out << CharT('\\') << CharT('1'); return;
+                case '\n': out << CharT('\\') << CharT('n'); return;
+                case '\r': out << CharT('\\') << CharT('r'); return;
+                case '\t': out << CharT('\\') << CharT('t'); return;
+                case '\f': out << CharT('\\') << CharT('f'); return;
+            }
             out
                 << CharT('\\')
                 << CharT('x')
@@ -121,6 +87,7 @@ namespace Util
                 << std::uppercase
                 << std::hex
                 << CharT(ch)
+                << std::resetiosflags(std::ios_base::basefield)
             ;
         }
     }
@@ -130,7 +97,7 @@ namespace Util
     {
         if(wquotes)
         {
-            out.put(CharT('"'));
+            out << CharT('"');
         }
         for(CharT ch: str)
         {
@@ -138,7 +105,7 @@ namespace Util
         }
         if(wquotes)
         {
-            out.put(CharT('"'));
+            out << CharT('"');
         }
     }
 
@@ -146,7 +113,7 @@ namespace Util
     std::basic_ostream<CharT>&
     sfprintf(
         std::basic_ostream<CharT>& out,
-        std::string_view format)
+        const std::string& format)
     {
         out << format;
         return out;
@@ -155,7 +122,7 @@ namespace Util
     template<typename CharT, typename Type, typename... Targs>
     std::basic_ostream<CharT>& sfprintf(
         std::basic_ostream<CharT>& out,
-        std::string_view fmt,
+        const std::string& fmt,
         Type value,
         Targs... Fargs
     )
@@ -178,8 +145,14 @@ namespace Util
                     case 'c':
                         out << value;
                         break;
-                    case 'q':
                     case 'p':
+                        {
+                            std::basic_stringstream<CharT> tmp;
+                            tmp << value;
+                            escapestring(out, tmp.str(), false);
+                        }
+                        break;
+                    case 'q':
                         {
                             std::basic_stringstream<CharT> tmp;
                             tmp << value;
@@ -202,6 +175,13 @@ namespace Util
         return out;
     }
 
+    template<typename... Args>
+    void error(const std::string& fmtstr, Args&&... args)
+    {
+        sfprintf(std::cerr, "ERROR: ");
+        sfprintf(std::cerr, fmtstr, args...);
+        std::cerr << std::endl;
+    }
 }
 
 struct ComRem
@@ -209,33 +189,62 @@ struct ComRem
     public:
         enum
         {
-            /*
-                0==not in comment.
-                1==1 slash,
-                2==C++ comment,
-                3==C comments
-            */
+            // undefined/default state
             CT_UNDEF,
+            // a single forward slash
             CT_FWDSLASH,
+            // a single backward slash
             CT_BCKSLASH,
+            // a single open parenthesis
             CT_OPENPAREN,
+            // a single close parenthesis
             CT_CLOSEPAREN,
+            /*
+            * C preprocessor line
+            * (#((els?)if(n?def)?|else|include|import|warning|error|pragma|line))
+            *
+            * this was already a major hack in the ruby version (see old/main.rb),
+            * and i'm not sure if it's worth implementing.
+            */  
             CT_PREPROC,
+            // a C++ comment (like this one!)
             CT_CPPCOMM,
+            /* a C comment (like this one!) */
             CT_ANSICOMM,
+            /*
+            * a Pascal-style comment (* like this! *)
+            * supporting '{' and '}' is going to be a bit tougher, i think.
+            * according to freepascal (https://www.freepascal.org/docs-html/ref/refse2.html):
+            *
+            *   Remark: In TP and Delphi mode, nested comments are not allowed,
+            *   for maximum compatibility with existing code for those compilers.
+            *
+            * so comment-nesting is supported-ish, but seriously only -ish.
+            */ 
             CT_PASCALCOMM,
+            // a hash-comment (python, perl, ruby, etc ...) # like this!
             CT_HASHCOMM,
-            
         };
 
         struct Options
         {
-            bool debugmessages = false;
-            bool cppcomments = true;
-            bool ansicomments = true;
-            bool pascalcomments = false;
-            bool hashcomments = false;
-            bool preprocessor = false;
+            bool use_warningmessages = true;
+            bool use_debugmessages = false;
+
+            bool allow_cppcomments = true;
+            bool allow_ansicomments = true;
+            bool allow_pascalcomments = false;
+            bool allow_hashcomments = false;
+
+            // if any preprocessor tokens were specified ...
+            bool have_ppctokens = false;
+            // and where they are stored.
+            std::vector<std::string> ppctokens;
+
+            // both infilename and outfilename are only used for diagnostics
+            // and are only modified through m_infp and m_outfp, respectively.
+            std::string infilename = "<stdin>";
+            std::string outfilename = "<stdout>";
         };
 
     private:
@@ -249,34 +258,51 @@ struct ComRem
         int m_state;
         int m_posline;
         int m_poscol;
-
+        int m_pascalnest;
+        bool m_pascalbrace;
 
     private:
         void initdefaults()
         {
-            m_posline = 1;
             m_state = CT_UNDEF;
-            m_poscol = 0;
-            m_posline = 1;
             m_prevch = EOF;
+            m_currch = EOF;
+            m_peekch = EOF;
+            m_posline = 1;
+            m_poscol = 0;
+            m_pascalnest = 0;
+            m_pascalbrace = false;
         }
 
         template<typename... Args>
-        void dbg(std::string_view fmtstr, Args&&... args)
+        void dbg(const std::string& fmtstr, Args&&... args)
         {
-            if(m_opts.debugmessages)
+            if(m_opts.use_debugmessages)
             {
-                /*
-                fprintf(stderr, ">>>>[%d:%d]: ", m_posline, m_poscol);
-                fprintf(stderr, fmtstr, args...);
-                fprintf(stderr, "\n");
-                */
-                Util::sfprintf(std::cerr, ">>>>[%d:%d]: ", m_posline, m_poscol);
+                Util::sfprintf(std::cerr, ">>>>[%s:%d:%d]: ", m_opts.infilename, m_posline, m_poscol);
                 Util::sfprintf(std::cerr, fmtstr, args...);
                 std::cerr << std::endl;
             }
         }
 
+        template<typename... Args>
+        void warn(const std::string& fmtstr, Args&&... args)
+        {
+            if(m_opts.use_warningmessages)
+            {
+                Util::sfprintf(std::cerr, "WARNING: [%p:%d:%d]: ", m_opts.infilename, m_posline, m_poscol);
+                Util::sfprintf(std::cerr, fmtstr, args...);
+                std::cerr << std::endl;
+            }
+        }
+
+        bool is_pascalcomm_begin()
+        {
+            return (
+                (('(' == m_currch) && ('*' == m_peekch)) ||
+                ('{' == m_currch)
+            );
+        }
 
     public:
         ComRem(const Options& opts, std::istream* infp, std::ostream* outfp):
@@ -379,9 +405,11 @@ struct ComRem
                             }
                             if(EOF == m_morech)
                             {
-                                fprintf(stderr,
-                                    "Unexpected EOF while reading %s literal on line %ld, column %ld.\n",
-                                        ('\'' == m_currch) ? "char" : "string", startLine, startCol);
+                                warn("unexpected end-of-file while reading %s literal, starting on line %d, column %d",
+                                    (('"' == m_currch) ? "string" : "char"),
+                                    startLine,
+                                    startCol
+                                );
                                 return false;
                             }
                             break;
@@ -391,9 +419,14 @@ struct ComRem
                             m_state = CT_FWDSLASH;
                             break;
                         }
-                        else if((('(' == m_currch) && ('*' == m_peekch)) && (m_opts.pascalcomments == true))
+                        //else if((('(' == m_currch) && ('*' == m_peekch)) && (m_opts.allow_pascalcomments == true))
+                        if(m_opts.allow_pascalcomments && is_pascalcomm_begin())
                         {
                             dbg("begin pascalcomment");
+                            if(m_currch == '{')
+                            {
+                                m_pascalbrace = true;
+                            }
                             m_state = CT_PASCALCOMM;
                             break;
                         }
@@ -410,12 +443,12 @@ struct ComRem
                         * case marked at the start of _this_ comment block.
                         * see also CT_ANSICOMM.
                         */
-                        if(('*' == m_currch) && (m_opts.ansicomments == true))
+                        if(('*' == m_currch) && (m_opts.allow_ansicomments == true))
                         {
                             m_state = CT_ANSICOMM;
                             state3Col = m_poscol - 1;
                         }
-                        else if(('/' == m_currch) && (m_opts.cppcomments == true))
+                        else if(('/' == m_currch) && (m_opts.allow_cppcomments == true))
                         {
                             m_state = CT_CPPCOMM;
                         }
@@ -455,13 +488,28 @@ struct ComRem
                     case CT_PASCALCOMM:
                         // no support for nested comments.
                         dbg("in ct_pascalcomm: currch='%c'", m_currch);
-                        if(')' == m_currch)
+                        if((('*' == m_prevch) && (')' == m_currch)) || (m_pascalbrace && (m_currch == '}')))
                         {
-                            if('*' == m_prevch)
+                            if(m_pascalnest == 0)
                             {
+                                if(m_pascalbrace)
+                                {
+                                    m_pascalbrace = false;
+                                }
                                 dbg("in ct_pascalcomm: end of comment");
                                 m_state = CT_UNDEF;
                             }
+                            else
+                            {
+                                warn("Pascal-comment: unnesting from level %d", m_pascalnest);
+                                m_pascalnest--;
+                            }
+                        }
+                        else if((('(' == m_currch) && (m_peekch == '*')) || (m_pascalbrace && (m_currch == '{')))
+                        {
+                            m_pascalnest += 1;
+                            warn("Pascal-comment: nested comment level %d detected! this may likely break", m_pascalnest);
+
                         }
                         break;
                     default:
@@ -500,44 +548,57 @@ int main(int argc, char** argv)
         std::cerr << "unknown option '" << v << "'!" << std::endl;
         return false;
     });
-    prs.on({"-d", "--debug"}, "show debug messages", [&]
+    prs.on({"-d", "--debug"}, "show debug messages written to standard error", [&]
     {
-        opts.debugmessages = true;
+        opts.use_debugmessages = true;
     });
-    prs.on({"-C", "--keepansi"}, "keep ansi C comments", [&]
+    prs.on({"-w", "--nowarnings"}, "disable warnings written to standard error", [&]
     {
-        opts.ansicomments = false;
+        opts.use_warningmessages = false;
     });
-    prs.on({"-X", "--keepcpp"}, "keep C++ comments", [&]
+    prs.on({"-a", "--keepansi"}, "keep ansi C comments (default: remove)", [&]
     {
-        opts.cppcomments = false;
+        opts.allow_ansicomments = false;
     });
-    prs.on({"-P", "--pascal"}, "also remove pascal style comments)", [&]
+    prs.on({"-c", "--keepcpp"}, "keep C++ comments (default: remove)", [&]
     {
-        opts.pascalcomments = true;
+        opts.allow_cppcomments = false;
     });
+    prs.on({"-p", "--pascal"}, "remove pascal style comments (default: keep)", [&]
+    {
+        opts.allow_pascalcomments = true;
+    });
+    /* implement me! */
+    #if 0
+    prs.on({"-x<tokens>", "--preprocessor=<tokens>"}, "remove comma-separated C-preprocessor tokens (i.e., '-xinclude,import')",
+    [&](const OptionParser::Value& val)
+    {
+        
+    });
+    #endif
+
     try
     {
         prs.parse(argc, argv);
         auto pos = prs.positional();
         if(pos.size() > 0)
         {
-            tmpfn = pos[0];
-            infp = new std::ifstream(tmpfn, std::ios::in | std::ios::binary);
+            opts.infilename = pos[0];
+            infp = new std::ifstream(opts.infilename, std::ios::in | std::ios::binary);
             if(!infp->good())
             {
-                fprintf(stderr, "cannot open '%s' for reading", tmpfn.c_str());
+                Util::error("cannot open %q for reading", opts.infilename);
                 return 1;
             }
             have_infile = true;
         }
         if(pos.size() > 1)
         {
-            tmpfn = pos[1];
-            outfp = new std::ofstream(tmpfn, std::ios::out | std::ios::binary);
+            opts.outfilename = pos[1];
+            outfp = new std::ofstream(opts.outfilename, std::ios::out | std::ios::binary);
             if(!outfp->good())
             {
-                fprintf(stderr, "cannot open '%s' for writing", tmpfn.c_str());
+                Util::error("cannot open '%s' for writing", opts.outfilename);
                 return 1;
             }
             have_outfile = true;

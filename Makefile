@@ -1,11 +1,18 @@
 
+##
+# todo: cross-building for DOS? do people still use DOS?
+# linux, maybe. if i can get the compiler to, y'know, compile.
+# mac, probably not. don't even know if that's possible.
+##
+
+
 srcfile = main.cpp
 # the main one, for prototyping, debugging, etc
-outfile_gcc   = remcpp.exe
+outfile_gcc   = rmcpp.exe
 # these are for testing, mostly.
-outfile_clang = remcppclang.exe
-outfile_msc   = remcppvs.exe
-outfile_clr   = remcppclr.exe
+outfile_clang = rmcppclang.exe
+outfile_msc   = rmcppvs.exe
+outfile_clr   = rmcppclr.exe
 
 
 cxx_gcc   = g++ -std=c++17
@@ -18,6 +25,9 @@ buildall: buildgcc buildclang buildmsc buildclr postclean
 
 postclean:
 	rm -f *.obj *.pdb *.mdb *.ilk
+
+clean: postclean
+	rm -f *.exe
 
 buildgcc: $(srcfile)
 	$(cxx_gcc) -Wall -Wextra -g3 -ggdb3 $(srcfile) -o $(outfile_gcc)
