@@ -1,0 +1,44 @@
+
+##
+## todo: package releases properly
+##
+
+*.exe
+*.core
+*.out
+*.bin
+*.pdb
+*.obj
+*.o
+*.ilk
+*.il
+*.tmp
+*.stackdump
+# these are far too large
+*.s
+
+## testing files. it's a mess!
+tmp.*
+t.*
+foo.*
+pre.*
+## i'm very sorry :-x
+*fuck*
+*shit*
+*cunt*
+
+## dummystd.h, etc, not yet ready, and frankly, shouldn't be here anyway
+*dummy*
+
+## very old stuff
+*.rb
+old/*
+old*/*
+backup/*
+backup*/*
+
+## generated stuff, i.e., _src, _files
+_*
+_*/*
+
+
