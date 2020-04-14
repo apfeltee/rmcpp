@@ -33,6 +33,8 @@
 *
 */
 
+#include <functional>
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <iomanip>
@@ -47,10 +49,67 @@
 
 namespace Util
 {
+    // based on
+
+    // trim from start (in place)
+    template<typename CharT>
+    void ltrim(std::basic_string<CharT>& str)
+    {
+        str.erase(str.begin(), std::find_if(str.begin(), str.end(), [](int ch)
+        {
+            return !std::isspace(ch);
+        }));
+    }
+
+    // trim from end (in place)
+    template<typename CharT>
+    void rtrim(std::basic_string<CharT>& str)
+    {
+        str.erase(std::find_if(str.rbegin(), str.rend(), [](int ch)
+        {
+            return !std::isspace(ch);
+        }).base(), str.end());
+    }
+
+    // trim from both ends (in place)
+    template<typename CharT>
+    void trim(std::basic_string<CharT>& str)
+    {
+        ltrim(str);
+        rtrim(str);
+    }
+
+    void split(const std::string& str, const std::string& delim, std::function<void(const std::string&)> cb)
+    {
+        size_t prevpos;
+        size_t herepos;
+        std::string token;
+        prevpos = 0;
+        herepos = 0;
+        while(true)
+        {
+            herepos = str.find(delim, prevpos);
+            if(herepos == std::string::npos)
+            {
+                herepos = str.size();
+            }
+            token = str.substr(prevpos, herepos-prevpos);
+            trim(token);
+            if (!token.empty())
+            {
+                cb(token);
+            }
+            prevpos = herepos + delim.size();
+            if((herepos > str.size()) || (prevpos > str.size()))
+            {
+                break;
+            }
+        }
+    }
+
     template<typename CharT>
     void escapechar(std::basic_ostream<CharT>& out, int ch, bool wquotes=false)
     {
-        //if(((ch >= ' ') && (ch <= '9')) || ((ch >= 'A') && (ch <= 'z')))
         if((ch >= 32) && (ch <= 126))
         {
             if(ch == '\\')
@@ -223,17 +282,29 @@ struct ComRem
             */ 
             CT_PASCALCOMM,
             // a hash-comment (python, perl, ruby, etc ...) # like this!
+            // this will NOT WORK with many shell or perl scripts, as it
+            // does not, nor ever will, support heredocs, et cetera.
             CT_HASHCOMM,
         };
 
         struct Options
         {
+            //! is RemCom allowed to complain? default: yes
             bool use_warningmessages = true;
+
+            //! is RemCom allowed to explain? default: no
             bool use_debugmessages = false;
 
+            //! remove C++-style comments? default: yes
             bool allow_cppcomments = true;
+
+            //! remove ANSI C comments? default: yes
             bool allow_ansicomments = true;
+
+            //! remove Pascal-style comments? default: no
             bool allow_pascalcomments = false;
+
+            //! handle #-style comments? default: no (they clash with the preprocessor!)
             bool allow_hashcomments = false;
 
             // if any preprocessor tokens were specified ...
@@ -248,17 +319,37 @@ struct ComRem
         };
 
     private:
+        // parser options
         Options m_opts;
+
+        // the input stream handle
         std::istream* m_infp;
+
+        // the output stream handle
         std::ostream* m_outfp;
-        int m_morech;
+
+        // the previous character
         int m_prevch;
+
+        // the current character
         int m_currch;
+
+        // the next peeked character
         int m_peekch;
+
+        // current state the parser is in
         int m_state;
+
+        // current line the parser is looking at
         int m_posline;
+
+        // current column the parser is looking at
         int m_poscol;
+        
+        // tracks comment nesting levels
         int m_pascalnest;
+
+        // when encountering a '{' in pascalmode. 
         bool m_pascalbrace;
 
     private:
@@ -304,6 +395,7 @@ struct ComRem
             );
         }
 
+
     public:
         ComRem(const Options& opts, std::istream* infp, std::ostream* outfp):
             m_opts(opts), m_infp(infp), m_outfp(outfp)
@@ -346,6 +438,7 @@ struct ComRem
         bool run()
         {
             int quote;
+            int morech;
             int state3Col;
             long startLine;
             long startCol;
@@ -379,19 +472,19 @@ struct ComRem
                                 {
                                     break;
                                 }
-                                m_morech = more();
-                                if(m_morech == EOF)
+                                morech = more();
+                                if(morech == EOF)
                                 {
                                     break;
                                 }
-                                switch(m_morech)
+                                switch(morech)
                                 {
                                     case '\\':
                                         escaped = !escaped;
                                         break;
                                     case '\'':
                                     case '"':
-                                        if(!escaped && quote == m_morech)
+                                        if(!escaped && quote == morech)
                                         {
                                             endOfString = true;
                                         }
@@ -401,9 +494,9 @@ struct ComRem
                                         escaped = false;
                                         break;
                                 }
-                                out(m_morech);
+                                out(morech);
                             }
-                            if(EOF == m_morech)
+                            if(EOF == morech)
                             {
                                 warn("unexpected end-of-file while reading %s literal, starting on line %d, column %d",
                                     (('"' == m_currch) ? "string" : "char"),
@@ -419,7 +512,11 @@ struct ComRem
                             m_state = CT_FWDSLASH;
                             break;
                         }
-                        //else if((('(' == m_currch) && ('*' == m_peekch)) && (m_opts.allow_pascalcomments == true))
+                        else if(m_opts.allow_hashcomments && (m_currch == '#'))
+                        {
+                            m_state = CT_HASHCOMM;
+                            break;
+                        }
                         if(m_opts.allow_pascalcomments && is_pascalcomm_begin())
                         {
                             dbg("begin pascalcomment");
@@ -460,7 +557,9 @@ struct ComRem
                             out(m_currch);
                         }
                         break;
-                    case CT_CPPCOMM: /* C++ comment */
+                    /* C++ comment */
+                    case CT_CPPCOMM:
+                    case CT_HASHCOMM:
                         if('\n' == m_currch)
                         {
                             m_state = CT_UNDEF;
@@ -468,6 +567,7 @@ struct ComRem
                         }
                         break;
                     case CT_ANSICOMM: /* C comment */
+                        dbg("in ansicomment: currch=%q", char(m_currch));
                         if('/' == m_currch)
                         {
                             if('*' == m_prevch)
@@ -486,8 +586,7 @@ struct ComRem
                         }
                         break;
                     case CT_PASCALCOMM:
-                        // no support for nested comments.
-                        dbg("in ct_pascalcomm: currch='%c'", m_currch);
+                        dbg("in pascalcomment: currch=%q", char(m_currch));
                         if((('*' == m_prevch) && (')' == m_currch)) || (m_pascalbrace && (m_currch == '}')))
                         {
                             if(m_pascalnest == 0)
@@ -496,19 +595,19 @@ struct ComRem
                                 {
                                     m_pascalbrace = false;
                                 }
-                                dbg("in ct_pascalcomm: end of comment");
+                                dbg("end pascalcomment");
                                 m_state = CT_UNDEF;
                             }
                             else
                             {
-                                warn("Pascal-comment: unnesting from level %d", m_pascalnest);
+                                warn("in pascalcomment: unnesting from level %d", m_pascalnest);
                                 m_pascalnest--;
                             }
                         }
                         else if((('(' == m_currch) && (m_peekch == '*')) || (m_pascalbrace && (m_currch == '{')))
                         {
                             m_pascalnest += 1;
-                            warn("Pascal-comment: nested comment level %d detected! this may likely break", m_pascalnest);
+                            warn("in pascalcomment: nested comment level %d detected! this may likely break", m_pascalnest);
 
                         }
                         break;
@@ -568,12 +667,24 @@ int main(int argc, char** argv)
     {
         opts.allow_pascalcomments = true;
     });
+    prs.on({"-l", "--hash"}, "remove #-style comments (clashes with preprocessor! dangerous)", [&]
+    {
+        opts.allow_hashcomments = true;
+    });
     /* implement me! */
-    #if 0
-    prs.on({"-x<tokens>", "--preprocessor=<tokens>"}, "remove comma-separated C-preprocessor tokens (i.e., '-xinclude,import')",
+    #if 1
+    prs.on({"-x?", "--preprocessor=?"}, "remove comma-separated C-preprocessor tokens (i.e., '-xinclude,import')",
     [&](const OptionParser::Value& val)
     {
-        
+        // -x can be specified several times!
+        Util::split(val.str(), ",", [&](const std::string& tok)
+        {
+            opts.ppctokens.push_back(tok);
+        });
+        if(opts.ppctokens.size() > 0)
+        {
+            opts.have_ppctokens = true;
+        }
     });
     #endif
 

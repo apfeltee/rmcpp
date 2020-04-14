@@ -40,5 +40,5 @@ backup*/*
 ## generated stuff, i.e., _src, _files
 _*
 _*/*
-
-
+?.txt
+out.*

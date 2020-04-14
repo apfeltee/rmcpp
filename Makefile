@@ -17,7 +17,7 @@ outfile_clr   = rmcppclr.exe
 
 cxx_gcc   = g++ -std=c++17
 cxx_clang = clang++ -std=c++17
-cxx_msc   = cl -std:c++latest
+cxx_msc   = cl -std:c++17
 
 # just build gcc by default, please.
 default: buildgcc postclean

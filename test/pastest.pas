@@ -1,17 +1,52 @@
 
 program foo;
-(* blah *)
+(* blah
 
-var foo: integer = 12345(* should be gone *);
+*)
+
+var 
+    nuts(* should be gone *): integer = 12345(* should be gone *);
 // a c++-style comment (* don't matter *)
 
+    quork: string = (*this is how you declare a single ' ... *)''(*...*)''(* yeah, seriously. *);
 
-var blah: string = (* should be gone *)'hurp de(* not a comment *) durp';
+    blah: string = (* should be gone *)'hurp de(* not a comment *) durp';
 { this (* shouldn't be a *) problem }
-var honk: string = 'foop';
+    honk: string = 'foop';
 
 (* a pas comment ... { and braced comment ... } blah blah *)
 
+(*
+    lets (*
+        go (*
+            really (*
+                deep (*
+                    even (*
+                        though (*
+                            most (*
+                                compilers (*
+                                    will (*
+                                        refuse (*
+                                            this
+                                            
+                                            (*(*(*(*(*(*(**)
+                                                (*(*(*(*(*(*(**)
+                                                    (*(*(*(*(*(*(*(*
+                                                    (*(*(*(* seriously who ever ok'd this shit? *)*)*)*)
+                                                    *)*)*)*)*)*)*)*)
+                                                *)*)*)*)*)*)
+                                            *)*)*)*)*)*)
+                                        *) durka durka
+                                    *) akrud akrud
+                                *) rudka rudka
+                            *) darku darku
+                        *) urkad urkad
+                    *) adkur adkur
+                *) rudak rudak
+            *) kadur kadur
+        *) raduk raduk
+    *) rukad rukad
+*)
 
 begin
     writeln((* pascal comment *)'hello world');
