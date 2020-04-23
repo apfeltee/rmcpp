@@ -75,12 +75,9 @@ int main()
 "past normal c++ comment";
     // C++ comment /
 
+int b = a//* divide by 4 */4;
 
-    // C++ comment in \
-   several        \
-   lines
-
-"past multiline c++ comment";
+-a;
 
 "
 *** EXPECT ERRORS BELOW:
@@ -93,6 +90,11 @@ int main()
     a = 0;/\
 * C comment * /
 */
+    // C++ comment in \
+   several        \
+   lines
+
+"past multiline c++ comment";
     /* C       *\
     \* comment */
     /* C comment \

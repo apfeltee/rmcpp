@@ -6,7 +6,7 @@
 ##
 
 
-srcfile = main.cpp
+srcfiles = main.cpp lib.cpp
 # the main one, for prototyping, debugging, etc
 outfile_gcc   = rmcpp.exe
 # these are for testing, mostly.
@@ -29,19 +29,19 @@ postclean:
 clean: postclean
 	rm -f *.exe
 
-buildgcc: $(srcfile)
-	$(cxx_gcc) -Wall -Wextra -g3 -ggdb3 $(srcfile) -o $(outfile_gcc)
+buildgcc: $(srcfiles)
+	$(cxx_gcc) -Wall -Wextra -g3 -ggdb3 $(srcfiles) -o $(outfile_gcc)
 
 # don't use 
-buildclang: $(srcfile)
-	$(cxx_clang) -Wall -Wextra $(srcfile) -o $(outfile_clang)
+buildclang: $(srcfilse)
+	$(cxx_clang) -Wall -Wextra $(srcfiles) -o $(outfile_clang)
 
 
 # according to cl options, it's actually -Fe<str>
 # but this is apparently the right way? wtf?
-buildmsc: $(srcfile)
-	$(cxx_msc) $(srcfile) -link -out:$(outfile_msc)
+buildmsc: $(srcfiles)
+	$(cxx_msc) $(srcfiles) -link -out:$(outfile_msc)
 
 
-buildclr: $(srcfile)
-	$(cxx_msc) -clr:pure $(srcfile) -link -out:$(outfile_clr)
+buildclr: $(srcfiles)
+	$(cxx_msc) -clr:pure $(srcfiles) -link -out:$(outfile_clr)
