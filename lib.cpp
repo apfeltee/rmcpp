@@ -35,6 +35,7 @@ void CommentStripper::initdefaults()
     m_poscol = 0;
     m_pascalnest = 0;
     m_pascalbrace = false;
+    m_incomment = false;
 }
 
 bool CommentStripper::is_pascalcomm_begin()
@@ -88,6 +89,30 @@ int CommentStripper::more()
 int CommentStripper::peek()
 {
     return m_infp->peek();
+}
+
+void CommentStripper::forward_comment(State st, char ch)
+{
+    if(m_oncommentcb)
+    {
+        if(!m_oncommentcb(st, ch))
+        {
+            m_oncommentcb = nullptr;
+        }
+    }
+}
+
+void CommentStripper::forward_comment(State st, const std::string& str)
+{
+    for(char ch: str)
+    {
+        forward_comment(st, ch);
+    }
+}
+
+void CommentStripper::onComment(OnCommentCallback cb)
+{
+    m_oncommentcb = cb;
 }
 
 bool CommentStripper::run(std::ostream& outfp)
@@ -167,12 +192,13 @@ bool CommentStripper::run(std::ostream& outfp)
                     m_state = CT_FWDSLASH;
                     break;
                 }
-                else if(m_opts.allow_hashcomments && (m_currch == '#'))
+                else if(m_opts.remove_hashcomments && (m_currch == '#'))
                 {
                     m_state = CT_HASHCOMM;
+                    m_incomment = true;
                     break;
                 }
-                if(m_opts.allow_pascalcomments && is_pascalcomm_begin())
+                else if(m_opts.remove_pascalcomments && is_pascalcomm_begin())
                 {
                     dbg("begin pascalcomment");
                     if(m_currch == '{')
@@ -180,7 +206,12 @@ bool CommentStripper::run(std::ostream& outfp)
                         m_pascalbrace = true;
                     }
                     m_state = CT_PASCALCOMM;
+                    m_incomment = true;
                     break;
+                }
+                else
+                {
+                    dbg("???how did we end up here???");
                 }
                 outfp.put(m_currch);
                 break;
@@ -195,34 +226,58 @@ bool CommentStripper::run(std::ostream& outfp)
                 * case marked at the start of _this_ comment block.
                 * see also CT_ANSICOMM.
                 */
-                if(('*' == m_currch) && (m_opts.allow_ansicomments == true))
+                if(('*' == m_currch) && (m_opts.remove_ansicomments == true))
                 {
                     m_state = CT_ANSICOMM;
+                    m_incomment = true;
                     state3Col = m_poscol - 1;
+                    forward_comment(m_state, "/*");
+                    break;
                 }
-                else if(('/' == m_currch) && (m_opts.allow_cppcomments == true))
+                if(('/' == m_currch) && ((m_opts.remove_cppcomments || m_opts.do_convertcpp)))
                 {
                     m_state = CT_CPPCOMM;
+                    m_incomment = true;
+                    if(m_opts.do_convertcpp)
+                    {
+                        outfp << "/*";
+                    }
+                    else
+                    {
+                        forward_comment(m_state, "//");
+                    }
+                    break;
                 }
-                else
-                {
-                    /* It wasn't a comment after all. */
-                    m_state = CT_UNDEF;
-                    outfp.put(m_prevch);
-                    outfp.put(m_currch);
-                }
+                /* It wasn't a comment after all. */
+                m_state = CT_UNDEF;
+                m_incomment = false;
+                outfp.put(m_prevch);
+                outfp.put(m_currch);
+                
                 break;
             /* C++ comment */
             case CT_CPPCOMM:
             case CT_HASHCOMM:
+                forward_comment(m_state, m_currch);
                 if('\n' == m_currch)
                 {
+                    if((m_state == CT_CPPCOMM) && (m_opts.do_convertcpp == true))
+                    {
+                        outfp << "*/";
+                    }
                     m_state = CT_UNDEF;
+                    m_incomment = false;
+                    outfp.put(m_currch);
+                    forward_comment(CT_UNDEF, 0);
+                }
+                else if(m_incomment && m_opts.do_convertcpp)
+                {
                     outfp.put(m_currch);
                 }
                 break;
             case CT_ANSICOMM: /* C comment */
                 dbg("in ansicomment: currch=%q", char(m_currch));
+                forward_comment(m_state, m_currch);
                 if('/' == m_currch)
                 {
                     if('*' == m_prevch)
@@ -234,14 +289,17 @@ bool CommentStripper::run(std::ostream& outfp)
                         /* And thus state3Col was introduced :/ */
                         if(m_poscol != (state3Col + 2))
                         {
+                            m_incomment = false;
                             m_state = CT_UNDEF;
                             state3Col = -99;
+                            forward_comment(CT_UNDEF, 0);
                         }
                     }
                 }
                 break;
             case CT_PASCALCOMM:
                 dbg("in pascalcomment: currch=%q", char(m_currch));
+                forward_comment(m_state, m_currch);
                 if((('*' == m_prevch) && (')' == m_currch)) || (m_pascalbrace && (m_currch == '}')))
                 {
                     if(m_pascalnest == 0)
@@ -251,7 +309,9 @@ bool CommentStripper::run(std::ostream& outfp)
                             m_pascalbrace = false;
                         }
                         dbg("end pascalcomment");
+                        m_incomment = false;
                         m_state = CT_UNDEF;
+                        forward_comment(m_state, 0);
                     }
                     else
                     {

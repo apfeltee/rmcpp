@@ -146,16 +146,20 @@ int main(int argc, char** argv)
     bool rc;
     bool have_infile;
     bool have_outfile;
+    bool have_commentfile;
     std::string outfilename;
     std::istream* infp;
     std::ostream* outfp;
+    std::ostream* commentfp;
     CommentStripper::Options opts;
     // default input is standard input, default output is standard output
     infp = &std::cin;
     outfp = &std::cout;
+    commentfp = nullptr;
     // track user-supplied file arguments
     have_infile = false;
     have_outfile = false;
+    have_commentfile = false;
     OptionParser prs;
     prs.onUnknownOption([&](const std::string& v)
     {
@@ -170,21 +174,41 @@ int main(int argc, char** argv)
     {
         opts.use_warningmessages = false;
     });
+    prs.on({"-o?", "--writecomments=?"}, "write removed comments to file <val>", [&](const auto& v)
+    {
+        auto file = v.str();
+        commentfp = new std::fstream(file, std::ios::out | std::ios::binary);
+        if(!commentfp->good())
+        {
+            std::cerr << "failed to open '" << file << "' for writing" << std::endl;
+            delete commentfp;
+        }
+        have_commentfile = true;
+        
+    });
     prs.on({"-a", "--keepansi"}, "keep ansi C comments (default: remove)", [&]
     {
-        opts.allow_ansicomments = false;
+        opts.remove_ansicomments = false;
     });
     prs.on({"-c", "--keepcpp"}, "keep C++ comments (default: remove)", [&]
     {
-        opts.allow_cppcomments = false;
+        opts.remove_cppcomments = false;
     });
     prs.on({"-p", "--pascal"}, "remove pascal style comments (default: keep)", [&]
     {
-        opts.allow_pascalcomments = true;
+        opts.remove_pascalcomments = true;
     });
     prs.on({"-l", "--hash"}, "remove #-style comments (clashes with preprocessor! dangerous)", [&]
     {
-        opts.allow_hashcomments = true;
+        opts.remove_hashcomments = true;
+    });
+    prs.on({"--convert-cpp"}, "convert C++ comments to C comments - does not remove comments!", [&]{
+        
+        opts.do_convertcpp = true;
+        opts.remove_ansicomments = false;
+        opts.remove_cppcomments = false;
+        opts.remove_hashcomments = false;
+        opts.remove_pascalcomments = false;
     });
     /* implement me! */
     #if 0
@@ -249,7 +273,27 @@ int main(int argc, char** argv)
         std::cerr << "error: " << ex.what() << std::endl;
     }
     CommentStripper x(opts, infp);
+    if(have_commentfile)
+    {
+        x.onComment([&](CommentStripper::State st, char ch)
+        {
+            if(st == CommentStripper::CT_UNDEF)
+            {
+                commentfp->put('\n');
+                //(*commentfp) << "\n(((end of comment)))\n";
+            }
+            else
+            {
+                commentfp->put(ch);
+            }
+            return true;
+        });
+    }
     rc = x.run(*outfp);
+    if(have_commentfile)
+    {
+        delete commentfp;
+    }
     if(have_infile)
     {
         delete infp;

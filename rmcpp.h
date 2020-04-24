@@ -212,7 +212,7 @@ namespace Util
 class CommentStripper
 {
     public:
-        enum
+        enum State
         {
             // undefined/default state
             CT_UNDEF,
@@ -262,20 +262,24 @@ class CommentStripper
             bool use_debugmessages = false;
 
             //! remove C++-style comments? default: yes
-            bool allow_cppcomments = true;
+            bool remove_cppcomments = true;
 
             //! remove ANSI C comments? default: yes
-            bool allow_ansicomments = true;
+            bool remove_ansicomments = true;
 
             //! remove Pascal-style comments? default: no
-            bool allow_pascalcomments = false;
+            bool remove_pascalcomments = false;
 
             //! handle #-style comments? default: no (they clash with the preprocessor!)
-            bool allow_hashcomments = false;
+            bool remove_hashcomments = false;
+
+            bool do_convertcpp = false;
 
             // infilename is only used for diagnostics
             std::string infilename = "<stdin>";
         };
+
+        using OnCommentCallback = std::function<bool(State, char)>;
 
     private:
         // parser options
@@ -284,6 +288,9 @@ class CommentStripper
         // the input stream handle
         std::istream* m_infp;
 
+        // current state the parser is in
+        State m_state;
+        
         // the previous character
         int m_prevch;
 
@@ -292,9 +299,6 @@ class CommentStripper
 
         // the next peeked character
         int m_peekch;
-
-        // current state the parser is in
-        int m_state;
 
         // current line the parser is looking at
         int m_posline;
@@ -307,6 +311,11 @@ class CommentStripper
 
         // when encountering a '{' in pascalmode. 
         bool m_pascalbrace;
+
+        // true if we're inside a comment
+        bool m_incomment;
+
+        OnCommentCallback m_oncommentcb;
 
     private:
         void initdefaults();
@@ -335,6 +344,8 @@ class CommentStripper
 
         bool is_pascalcomm_begin();
 
+        void forward_comment(State st, char ch);
+        void forward_comment(State st, const std::string& str);
 
     public:
         /*
@@ -371,6 +382,8 @@ class CommentStripper
         * the stream
         */
         int peek();
+
+        void onComment(OnCommentCallback cb);
 
         /**
         * @param outfp the std::ostream-compatible output-stream to write to.
