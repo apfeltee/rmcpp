@@ -28,13 +28,13 @@ or just
 
 where [options]:
 
-    - `-d`, `--debug` enables debugging messages. Got a file with funky-looking comments? This might help you find the issue.
-    - `-w`, `--nowarnings` Disables warning messages. Right now applies to Pascal-mode when encountering nested comments, unterminated comments, and unterminated strings will trigger a warning as well.
-    - `-a`, `--keepansi` keeps C comments (`/* these! */`).
-    - `-c`, `--keepcpp` keeps C++ comments (`// like this one!`).
-    - `-p`, `--pascal` enables Pascal mode - it will recognize Pascal-style comments, i.e., `(* these *)`, and `{ these }`, as well as C++ comments, and ANSI C comments (which are apparently used in VERY old Pascal source files).
-    - `-l`, `--hash` enables deletion of basic Line comments starting with a hash symbol, i.e., `# stuff like this`.
-    - `-o`, `--writecomments=<file>` writes comments removed from the input file/input stream to `<file>`.  
+  + `-d`, `--debug` enables debugging messages. Got a file with funky-looking comments? This might help you find the issue.
+  + `-w`, `--nowarnings` Disables warning messages. Right now applies to Pascal-mode when encountering nested comments, unterminated comments, and unterminated strings will trigger a warning as well.
+  + `-a`, `--keepansi` keeps C comments (`/* these! */`).
+  + `-c`, `--keepcpp` keeps C++ comments (`// like this one!`).
+  + `-p`, `--pascal` enables Pascal mode - it will recognize Pascal-style comments, i.e., `(* these *)`, and `{ these }`, as well as C++ comments, and ANSI C comments (which are apparently used in VERY old Pascal source files).
+  + `-l`, `--hash` enables deletion of basic Line comments starting with a hash symbol, i.e., `# stuff like this`.
+  + `-o`, `--writecomments=<file>` writes comments removed from the input file/input stream to `<file>`.  
                                      Useful if your source also happens to be your documentation (not that i would so something like that... 😅).
 
 
@@ -44,7 +44,10 @@ rmcpp is also a library, `main.cpp` shows a decent way of using it:
 
 ```c++
     CommentStripper::Options opts;
-    /* most parsing options are set through <CommentStripper::Options> */
+    /*
+    * most parsing options are set through <CommentStripper::Options>
+    * a healthy default is already set - just remove C++ and C comments.
+    */
     CommentStripper crx(opts, std::cin);
     {
         /* maybe you'd like to hang on to those comments ... */
@@ -84,6 +87,8 @@ rmcpp is also a library, `main.cpp` shows a decent way of using it:
     }
     /* that's it. easy-peasy. */
 ```
+
+## Requirements
 
 The main program uses [https://github.com/apfeltee/optionparser](optionparser.hpp), which is just a single header.
 
