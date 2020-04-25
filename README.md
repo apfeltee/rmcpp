@@ -90,5 +90,5 @@ rmcpp is also a library, `main.cpp` shows a decent way of using it:
 
 ## Requirements
 
-The main program uses [https://github.com/apfeltee/optionparser](optionparser.hpp), which is just a single header.
+The main program uses [optionparser.hpp](https://github.com/apfeltee/optionparser), which is just a single header.
 
