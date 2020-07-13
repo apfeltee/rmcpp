@@ -186,6 +186,10 @@ int main(int argc, char** argv)
         have_commentfile = true;
         
     });
+    prs.on({"-s", "--strip"}, "remove empty lines (does NOT remove linefeeds preceded by whitespace) (default: keep)", [&]
+    {
+        opts.remove_emptylines = true;
+    });
     prs.on({"-a", "--keepansi"}, "keep ansi C comments (default: remove)", [&]
     {
         opts.remove_ansicomments = false;

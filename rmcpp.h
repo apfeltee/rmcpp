@@ -216,6 +216,7 @@ class CommentStripper
         {
             // undefined/default state
             CT_UNDEF,
+            CT_WHITESPACE,
             // a single forward slash
             CT_FWDSLASH,
             // a single backward slash
@@ -260,6 +261,9 @@ class CommentStripper
 
             //! is RemCom allowed to explain? default: no
             bool use_debugmessages = false;
+
+            //! remove remaining whitespace? default: no
+            bool remove_emptylines = false;
 
             //! remove C++-style comments? default: yes
             bool remove_cppcomments = true;
@@ -342,7 +346,9 @@ class CommentStripper
             }
         }
 
+        bool is_space();
         bool is_pascalcomm_begin();
+        void do_skipemptylines();
 
         void forward_comment(State st, char ch);
         void forward_comment(State st, const std::string& str);

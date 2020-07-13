@@ -38,6 +38,37 @@ void CommentStripper::initdefaults()
     m_incomment = false;
 }
 
+bool CommentStripper::is_space()
+{
+    if(m_currch == '\n')
+    {
+        if((m_peekch == '\r') || (m_peekch == '\n'))
+        {
+            return true;
+        }
+        return false;
+    }
+    return (
+        (m_currch == ' ') ||
+        (m_currch == '\t')
+    );
+}
+
+void CommentStripper::do_skipemptylines()
+{
+    while(true)
+    {
+        if((m_currch == '\n') && ((m_peekch == '\r') || (m_peekch == '\n')))
+        {
+            m_currch = more();
+        }
+        else
+        {
+            return;
+        }
+    }
+}
+
 bool CommentStripper::is_pascalcomm_begin()
 {
     return (
@@ -208,6 +239,14 @@ bool CommentStripper::run(std::ostream& outfp)
                     m_state = CT_PASCALCOMM;
                     m_incomment = true;
                     break;
+                }
+                else if(is_space() && m_opts.remove_emptylines)
+                {
+                    do_skipemptylines();
+                    if(m_currch == EOF)
+                    {
+                        return false;
+                    }
                 }
                 else
                 {
